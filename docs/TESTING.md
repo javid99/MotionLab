@@ -11,7 +11,8 @@
 
 - `vitest.config.ts` — jsdom, React plugin, `@` alias → `./src`,
   test glob: `src/**/*.test.{ts,tsx}` and `tests/**/*.test.{ts,tsx}`.
-- `vitest.setup.ts` — jest-dom matchers.
+- `vitest.setup.ts` — jest-dom matchers plus explicit RTL `cleanup()` after
+  each test (required because vitest runs with `globals: false`).
 - `tests/smoke.test.ts` — sanity test proving the harness runs.
 
 ## Scripts
@@ -46,6 +47,27 @@
 - Never weaken a test to make a change pass; if a test encodes outdated
   behavior, change the test deliberately and say so in the PR/report.
 - A command is "passing" only if it was executed and exited 0.
+
+## Pre-Commit Verification and Git Review (mandatory)
+
+Every completed backlog task ends with exactly one verified, task-scoped
+commit (full policy in AGENTS.md, "Git Commit Workflow"):
+
+1. Run the applicable checks and require green before committing:
+   `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
+2. Fix task-related failures and rerun the relevant checks.
+3. Inspect `git status` and the complete task diff; confirm no unrelated
+   files, generated artifacts, secrets, or pre-existing changes are included.
+4. Stage only task files explicitly (`git add <file>...`).
+5. Commit using Conventional Commits:
+   `<type>(<scope>): <imperative description>` — types and examples in
+   AGENTS.md.
+6. Report the commit hash, commit message, files included, and verification
+   results.
+
+If an unrelated, pre-existing failure blocks a check, report it clearly and
+do not silently bypass or weaken anything. Local commits only — never push
+without explicit authorization.
 
 ## Determinism
 
