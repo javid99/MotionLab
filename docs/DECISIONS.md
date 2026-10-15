@@ -131,20 +131,35 @@ SUPERSEDED.
   emitted using the keyframe with the **greater `timeMs`** (later keyframe
   wins, mirroring CSS duplicate-selector behavior). A dedicated test covers
   merging.
-- **SVG transform origin (precise):** CSS transform origin for SVG elements
-  resolves against the reference box chosen by `transform-box`, so the
-  exporter sets `transform-box: view-box` and an explicit
-  `transform-origin: <cx>px <cy>px` — the element's center in SVG user
-  units, computed from static geometry (rect: `x + width/2`, `y + height/2`;
-  ellipse: `x + rx`, `y + ry`; text: per the deterministic layout constants
-  defined with the renderer, see below). `view-box` avoids `fill-box`'s
-  dependence on browser-computed bounding boxes (font metrics for text).
-  The SVG renderer composes its matrix about the same `(cx, cy)` (see
-  ARCHITECTURE.md, "Transform composition"). Rotation (degrees, clockwise)
-  and scale semantics are identical in CSS and SVG — no axis compensation.
+- **SVG transform origin (precise; corrected 2026-10-15):** CSS transform
+  origin for SVG elements resolves against the reference box chosen by
+  `transform-box`. The exporter sets `transform-box: view-box` and
+  `transform-origin: <width/2>px <height/2>px` — the element's **local**
+  center in view-box user units, derived from static geometry (rect:
+  `width/2`, `height/2`; ellipse: `rx`, `ry`; text: half the deterministic
+  text box), provided by `getCssTransformOrigin` in
+  `src/lib/elementTransform.ts`.
+  **Correction rationale:** the previously documented absolute-center origin
+  (`x + width/2`, `y + height/2`) is not matrix-equivalent to the renderer
+  when the translation is inside the transform list — CSS applies the list
+  as `M = T(origin) · translate(x,y) · rotate · scale · T(-origin)`, so an
+  absolute-center origin makes the rotation center drift with the
+  translation. With the local-center origin the CSS matrix is exactly the
+  renderer matrix: `T(g) · T(x,y) · R · S · T(-g) = T(x + g) · R · S · T(-g)`
+  where `g = (width/2, height/2)`. The element's center is still carried to
+  `(x + width/2, y + height/2)` (its position under the canonical
+  composition is unchanged); only the CSS origin expression was wrong.
+  Equivalence is verified by the matrix tests in
+  `src/lib/elementTransform.test.ts` (translation, rotation, non-uniform
+  scale, combined — at the center and non-center points) and will be
+  asserted end-to-end against emitted CSS in T15.
+  `view-box` avoids `fill-box`'s dependence on browser-computed bounding
+  boxes (font metrics for text). Rotation (degrees, clockwise) and scale
+  semantics are identical in CSS and SVG — no axis compensation.
   For text elements, renderer and exporter must share deterministic
-  bounding-box constants (no font measurement); the exact constants are
-  specified in T5 and covered by the shared matrix test.
+  bounding-box constants (no font measurement); the constants are
+  implemented in `src/lib/elementTransform.ts` and covered by the shared
+  matrix tests.
   **Confirmed v1 text constants (owner-approved, 2026-10-12):** width =
   0.6 × fontSize × character count, height = 1.2 × fontSize, top-left at
   `(x, y)`.

@@ -46,6 +46,8 @@ src/
     cssExporter.ts
   lib/
     coords.ts             # screen <-> canvas <-> scene coordinate conversion
+    elementTransform.ts   # element geometry/transform composition shared by
+                          #   renderer (T5) and CSS exporter (T15)
     id.ts                 # id generation
 tests/                    # cross-cutting integration tests
 ```
@@ -289,13 +291,16 @@ identically:
     `(x, y)`).
 - **SVG specifics:** for CSS applied to SVG elements, the transform origin
   resolves against the reference box selected by `transform-box`. The
-  exporter therefore emits `transform-box: view-box` and an explicit
-  `transform-origin: <cx>px <cy>px` (not `transform-origin: center`, which
-  would depend on browser-computed bounding boxes). The renderer must
-  produce the same result — either by composing the matrix itself about
-  `(cx, cy)` or via the same `transform-box`/`transform-origin` CSS.
-  Rotation (degrees, clockwise) and scale semantics are identical in CSS
-  and SVG; no axis compensation is needed.
+  exporter therefore emits `transform-box: view-box` and
+  `transform-origin: <width/2>px <height/2>px` — the element's **local**
+  center (via `getCssTransformOrigin` in `src/lib/elementTransform.ts`).
+  With the translation inside the CSS transform list, the local-center
+  origin makes the CSS matrix exactly equal to the renderer's composed
+  matrix; an absolute-center origin would not (corrected 2026-10-15, see
+  ADR-008). The renderer composes the matrix itself via
+  `composeElementTransform` (same module). Rotation (degrees, clockwise)
+  and scale semantics are identical in CSS and SVG; no axis compensation is
+  needed.
 - A shared consistency test asserts that renderer output and exporter
   output produce the same effective matrix for a fixture element
   (see T5 and T15).

@@ -80,3 +80,24 @@ export function composeElementTransform(
     `translate(${-cx} ${-cy})`,
   ].join(" ");
 }
+
+/**
+ * CSS `transform-origin` for the exported element (ADR-008, corrected
+ * 2026-10-15): the element's **local** center `(width/2, height/2)` in
+ * view-box user units, emitted with `transform-box: view-box`.
+ *
+ * Rationale: CSS applies the transform list as
+ * `M = T(origin) · translate(x, y) · rotate · scale · T(-origin)`. With the
+ * translation inside the list, an absolute-center origin `(x + w/2, y + h/2)`
+ * yields a matrix whose rotation center drifts with the translation and does
+ * not match the renderer. With the local-center origin the CSS matrix is
+ * exactly the renderer matrix:
+ * `T(g) · T(x,y) · R · S · T(-g) = T(x + g) · R · S · T(-g)`, where
+ * `g = (w/2, h/2)` — identical to `composeElementTransform`. Verified by the
+ * matrix equivalence tests in `elementTransform.test.ts` and to be asserted
+ * end-to-end against emitted CSS in T15.
+ */
+export function getCssTransformOrigin(element: SceneElement): Point {
+  const size = getElementSize(element);
+  return { x: size.width / 2, y: size.height / 2 };
+}
