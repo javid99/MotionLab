@@ -1,7 +1,8 @@
 /**
  * Persistent project data model — the unit of persistence (see
- * docs/ARCHITECTURE.md, "Project Data Model"). Types only; factories live in
- * `defaults.ts`, runtime validation of untrusted data in `validate.ts` (T13).
+ * docs/ARCHITECTURE.md, "Project Data Model"). Types plus the runtime list
+ * of animatable properties; factories live in `defaults.ts`, runtime
+ * validation of untrusted data in `validate.ts` (T13).
  */
 
 export type Easing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
@@ -14,6 +15,16 @@ export type AnimatableProperty =
   | "scaleX"
   | "scaleY"
   | "opacity";
+
+/** Runtime list of the animatable properties (type-checked against the union). */
+export const ANIMATABLE_PROPERTIES = [
+  "x",
+  "y",
+  "rotation",
+  "scaleX",
+  "scaleY",
+  "opacity",
+] as const satisfies readonly AnimatableProperty[];
 
 /** Base (rest) transform; the single source of truth for x/y/rotation/scale. */
 export interface Transform {
