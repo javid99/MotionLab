@@ -57,6 +57,13 @@ export interface ProjectStoreState {
   /** Replaces the document wholesale (trusted input; validation is T13). */
   setProject: (project: Project) => void;
   /**
+   * Appends a factory-created element. Returns false (no change) if an
+   * element with the same id already exists.
+   */
+  addElement: (element: SceneElement) => boolean;
+  /** Removes an element; returns false (no change) for unknown ids. */
+  removeElement: (elementId: string) => boolean;
+  /**
    * Merges `updates` into the element with `elementId`. `id`, `type`, and
    * `keyframes` are not updatable here (keyframe edits go through
    * `addKeyframe`/`removeKeyframe`); `updates` is a union of per-type
@@ -93,6 +100,36 @@ export function createProjectStore(
 
     setProject: (project) => {
       set({ project });
+    },
+
+    addElement: (element) => {
+      const { project } = get();
+      if (project.elements.some((el) => el.id === element.id)) {
+        return false;
+      }
+      set({
+        project: {
+          ...project,
+          elements: [...project.elements, element],
+          updatedAt: nowIso(),
+        },
+      });
+      return true;
+    },
+
+    removeElement: (elementId) => {
+      const { project } = get();
+      if (!project.elements.some((el) => el.id === elementId)) {
+        return false;
+      }
+      set({
+        project: {
+          ...project,
+          elements: project.elements.filter((el) => el.id !== elementId),
+          updatedAt: nowIso(),
+        },
+      });
+      return true;
     },
 
     updateElement: (elementId, updates) => {

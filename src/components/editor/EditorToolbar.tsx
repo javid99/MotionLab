@@ -1,10 +1,23 @@
+"use client";
+
+import { useEditorStore } from "@/editor/editorStore";
+import { useProjectStore } from "@/editor/projectStore";
+import { createElement } from "@/project/defaults";
+import type { SceneElement } from "@/project/model";
+
 /**
- * Top toolbar strip (T3). The tool chips below are structural placeholders:
- * they are deliberately non-interactive (plain spans, not buttons) until
- * real tool behavior arrives in later tasks.
+ * Top toolbar strip (T6): the rect/ellipse/text chips are functional add
+ * buttons wired to the project store and selection; "Select"/"Move" remain
+ * structural placeholders (plain spans) until tool modes exist.
  */
 
-const TOOLS = ["Select", "Move", "Rect", "Ellipse", "Text"] as const;
+const TOOLS = ["Select", "Move"] as const;
+
+const ADDABLE: Array<{ type: SceneElement["type"]; label: string }> = [
+  { type: "rect", label: "Rect" },
+  { type: "ellipse", label: "Ellipse" },
+  { type: "text", label: "Text" },
+];
 
 function LogoMark() {
   return (
@@ -35,6 +48,23 @@ function LogoMark() {
 }
 
 export default function EditorToolbar() {
+  const projectName = useProjectStore((s) => s.project.name);
+  const addElement = useProjectStore((s) => s.addElement);
+  const select = useEditorStore((s) => s.select);
+
+  function handleAdd(type: SceneElement["type"]): void {
+    // Narrow the type literal so the overloaded factory resolves per type.
+    const element =
+      type === "rect"
+        ? createElement("rect")
+        : type === "ellipse"
+          ? createElement("ellipse")
+          : createElement("text");
+    if (addElement(element)) {
+      select(element.id);
+    }
+  }
+
   return (
     <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-neutral-800 bg-neutral-900 px-4 py-2">
       <div className="flex items-center gap-2">
@@ -56,9 +86,20 @@ export default function EditorToolbar() {
             {tool}
           </span>
         ))}
+        <span aria-hidden="true" className="mx-1 h-4 w-px bg-neutral-700" />
+        {ADDABLE.map(({ type, label }) => (
+          <button
+            key={type}
+            type="button"
+            aria-label={`Add ${label.toLowerCase()} element`}
+            onClick={() => handleAdd(type)}
+            className="rounded-md px-2.5 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-800 focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-400"
+          >
+            {label}
+          </button>
+        ))}
       </div>
-      {/* Documented factory default name; wired to the store in a later task. */}
-      <span className="ml-auto text-xs text-neutral-500">Untitled project</span>
+      <span className="ml-auto text-xs text-neutral-500">{projectName}</span>
     </header>
   );
 }

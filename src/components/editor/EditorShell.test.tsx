@@ -10,13 +10,21 @@ describe("EditorShell", () => {
     expect(screen.getByText("Untitled project")).toBeInTheDocument();
   });
 
-  it("renders the tool strip as non-interactive placeholders", () => {
+  it("renders tool placeholders and functional add buttons (T6)", () => {
     render(<EditorShell />);
 
     const tools = screen.getByRole("group", { name: "Editor tools" });
-    for (const tool of ["Select", "Move", "Rect", "Ellipse", "Text"]) {
-      const chip = within(tools).getByText(tool);
-      expect(chip.tagName).not.toBe("BUTTON");
+    // Select/Move remain structural placeholders.
+    for (const tool of ["Select", "Move"]) {
+      expect(within(tools).getByText(tool).tagName).not.toBe("BUTTON");
+    }
+    // Rect/Ellipse/Text are functional add buttons since T6.
+    for (const label of ["rect", "ellipse", "text"]) {
+      expect(
+        within(tools).getByRole("button", {
+          name: `Add ${label} element`,
+        }),
+      ).toBeInTheDocument();
     }
   });
 
@@ -48,9 +56,19 @@ describe("EditorShell", () => {
     expect(within(timeline).getByText("No keyframes yet.")).toBeInTheDocument();
   });
 
-  it("contains no interactive controls (T3 is structural only)", () => {
+  it("limits interactive controls to the toolbar add buttons (T6)", () => {
     const { container } = render(<EditorShell />);
 
-    expect(container.querySelector("button, a, input, select, textarea")).toBeNull();
+    const buttons = container.querySelectorAll("button");
+    expect(buttons).toHaveLength(3);
+    for (const button of buttons) {
+      expect(button.getAttribute("aria-label")).toMatch(/^Add \w+ element$/);
+    }
+    // No interactive controls outside the toolbar.
+    expect(
+      container.querySelectorAll(
+        "main button, main a, main input, aside button, aside input, section[aria-label=Timeline] button",
+      ),
+    ).toHaveLength(0);
   });
 });

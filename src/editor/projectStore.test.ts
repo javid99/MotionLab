@@ -473,3 +473,51 @@ describe("projectStore — isolation of unrelated state", () => {
     expect(getTrack(element, "x").map((k) => k.timeMs)).toEqual([500, 1000]);
   });
 });
+
+describe("projectStore — addElement / removeElement", () => {
+  it("appends an element and bumps updatedAt", () => {
+    const { store, project } = makeStore();
+    const element = createElement("text", { name: "New" });
+
+    const result = store.getState().addElement(element);
+
+    expect(result).toBe(true);
+    const state = store.getState().project;
+    expect(state.elements).toHaveLength(3);
+    expect(state.elements[2]).toBe(element);
+    expect(state.elements[0]).toBe(project.elements[0]);
+    expect(state.updatedAt).toMatch(ISO_8601_REGEX);
+  });
+
+  it("rejects duplicate element ids without changing state", () => {
+    const { store, project } = makeStore();
+    const before = store.getState().project;
+
+    const result = store.getState().addElement(project.elements[0]);
+
+    expect(result).toBe(false);
+    expect(store.getState().project).toBe(before);
+  });
+
+  it("removes an element while leaving others untouched", () => {
+    const { store, project } = makeStore();
+    const [, dot] = project.elements;
+
+    const result = store.getState().removeElement(project.elements[0].id);
+
+    expect(result).toBe(true);
+    const state = store.getState().project;
+    expect(state.elements).toEqual([dot]);
+    expect(state.elements[0]).toBe(dot);
+  });
+
+  it("returns false and changes nothing for an unknown element id on remove", () => {
+    const { store } = makeStore();
+    const before = store.getState().project;
+
+    const result = store.getState().removeElement("no-such-id");
+
+    expect(result).toBe(false);
+    expect(store.getState().project).toBe(before);
+  });
+});
