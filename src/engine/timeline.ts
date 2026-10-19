@@ -147,3 +147,24 @@ export function elementEffectiveDurationMs(element: SceneElement): number {
   }
   return max;
 }
+
+/**
+ * Normalized position of `timeMs` within `[0, durationMs]`, clamped to
+ * `[0, 1]` — the deterministic time→position mapping used by the timeline
+ * UI. Throws `RangeError` for non-finite inputs or a non-positive duration.
+ */
+export function timeToFraction(timeMs: number, durationMs: number): number {
+  return clampTime(timeMs, durationMs) / durationMs;
+}
+
+/**
+ * Inverse of `timeToFraction`: the time in milliseconds for a normalized
+ * `fraction`, clamped to `[0, durationMs]`. Throws `RangeError` for
+ * non-finite inputs or a non-positive duration.
+ */
+export function fractionToTime(fraction: number, durationMs: number): number {
+  if (!Number.isFinite(fraction)) {
+    throw new RangeError(`Invalid fraction: ${fraction}`);
+  }
+  return clampTime(fraction * durationMs, durationMs);
+}

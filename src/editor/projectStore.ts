@@ -82,6 +82,18 @@ export interface ProjectStoreState {
   addKeyframe: (elementId: string, keyframe: Keyframe) => boolean;
   /** Removes a keyframe; returns false (no change) for unknown ids. */
   removeKeyframe: (elementId: string, keyframeId: string) => boolean;
+  /**
+   * Moves a keyframe to a new integer `timeMs` within
+   * `[0, project.durationMs]`, keeping the track sorted. Rejects (returns
+   * false, no change): unknown element/keyframe ids, non-integer or
+   * out-of-range times, and a keyframe already occupying the target time on
+   * the same property track.
+   */
+  moveKeyframe: (
+    elementId: string,
+    keyframeId: string,
+    timeMs: number,
+  ) => boolean;
   /** Replaces the canvas; rejects non-finite or non-positive `fps`. */
   setCanvas: (canvas: Project["canvas"]) => boolean;
 }
@@ -182,6 +194,50 @@ export function createProjectStore(
         keyframes: [...element.keyframes, keyframe].sort(
           (a, b) => a.timeMs - b.timeMs,
         ),
+      };
+      set({
+        project: {
+          ...project,
+          elements: project.elements.map((el) =>
+            el.id === elementId ? nextElement : el,
+          ),
+          updatedAt: nowIso(),
+        },
+      });
+      return true;
+    },
+
+    moveKeyframe: (elementId, keyframeId, timeMs) => {
+      const { project } = get();
+      const element = project.elements.find((el) => el.id === elementId);
+      if (!element) {
+        return false;
+      }
+      const keyframe = element.keyframes.find((k) => k.id === keyframeId);
+      if (!keyframe) {
+        return false;
+      }
+      if (
+        !Number.isInteger(timeMs) ||
+        timeMs < 0 ||
+        timeMs > project.durationMs
+      ) {
+        return false;
+      }
+      const duplicate = element.keyframes.some(
+        (k) =>
+          k.id !== keyframeId &&
+          k.property === keyframe.property &&
+          k.timeMs === timeMs,
+      );
+      if (duplicate) {
+        return false;
+      }
+      const nextElement: SceneElement = {
+        ...element,
+        keyframes: element.keyframes
+          .map((k) => (k.id === keyframeId ? { ...k, timeMs } : k))
+          .sort((a, b) => a.timeMs - b.timeMs),
       };
       set({
         project: {

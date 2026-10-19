@@ -521,3 +521,84 @@ describe("projectStore — addElement / removeElement", () => {
     expect(store.getState().project).toBe(before);
   });
 });
+
+describe("projectStore — moveKeyframe", () => {
+  function withKeyframes() {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+    const first = createKeyframe("x", 1000, 10);
+    const second = createKeyframe("x", 3000, 30);
+    store.getState().addKeyframe(rectId, first);
+    store.getState().addKeyframe(rectId, second);
+    return { store, rectId, first, second };
+  }
+
+  it("moves a keyframe and keeps the track sorted, preserving other fields", () => {
+    const { store, rectId, first } = withKeyframes();
+
+    const result = store.getState().moveKeyframe(rectId, first.id, 2500);
+
+    expect(result).toBe(true);
+    const track = store
+      .getState()
+      .project.elements[0].keyframes.filter((k) => k.property === "x");
+    expect(track.map((k) => k.timeMs)).toEqual([2500, 3000]);
+    expect(track[0].value).toBe(10);
+    expect(track[0].id).toBe(first.id);
+    expect(store.getState().project.updatedAt).toMatch(ISO_8601_REGEX);
+  });
+
+  it("allows moving a keyframe onto its own current time", () => {
+    const { store, rectId, first } = withKeyframes();
+
+    expect(store.getState().moveKeyframe(rectId, first.id, 1000)).toBe(true);
+    expect(
+      store.getState().project.elements[0].keyframes.filter((k) => k.property === "x"),
+    ).toHaveLength(2);
+  });
+
+  it("rejects a target time occupied by another keyframe on the same track", () => {
+    const { store, rectId, first } = withKeyframes();
+    const before = store.getState().project;
+
+    const result = store.getState().moveKeyframe(rectId, first.id, 3000);
+
+    expect(result).toBe(false);
+    expect(store.getState().project).toBe(before);
+  });
+
+  it("allows identical times on different property tracks", () => {
+    const { store, rectId, first } = withKeyframes();
+    // y track has a keyframe at 1000; the x track does not.
+    store.getState().addKeyframe(rectId, createKeyframe("y", 1000, 5));
+
+    const result = store.getState().moveKeyframe(rectId, first.id, 1000);
+
+    expect(result).toBe(true);
+    const element = store.getState().project.elements[0];
+    expect(getTrack(element, "x").map((k) => k.timeMs)).toEqual([1000, 3000]);
+    expect(getTrack(element, "y").map((k) => k.timeMs)).toEqual([1000]);
+  });
+
+  it("rejects non-integer, negative, and beyond-duration times", () => {
+    const { store, rectId, first } = withKeyframes();
+    const invalidTimes = [-1, 12.5, 5001, Number.NaN];
+
+    for (const timeMs of invalidTimes) {
+      const before = store.getState().project;
+      expect(store.getState().moveKeyframe(rectId, first.id, timeMs)).toBe(
+        false,
+      );
+      expect(store.getState().project).toBe(before);
+    }
+  });
+
+  it("returns false and changes nothing for unknown element or keyframe ids", () => {
+    const { store, rectId, first } = withKeyframes();
+    const before = store.getState().project;
+
+    expect(store.getState().moveKeyframe("no-such-el", first.id, 2000)).toBe(false);
+    expect(store.getState().moveKeyframe(rectId, "no-such-kf", 2000)).toBe(false);
+    expect(store.getState().project).toBe(before);
+  });
+});

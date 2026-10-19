@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import EditorShell from "./EditorShell";
+import { useEditorStore } from "@/editor/editorStore";
+import { useProjectStore } from "@/editor/projectStore";
+import { createProject } from "@/project/defaults";
+
+beforeEach(() => {
+  useProjectStore.setState({ project: createProject() });
+  useEditorStore.setState({ playheadMs: 0, selectedElementId: null });
+});
 
 describe("EditorShell", () => {
   it("renders the top toolbar with the app name and project label", () => {
@@ -56,18 +64,21 @@ describe("EditorShell", () => {
     expect(within(timeline).getByText("No keyframes yet.")).toBeInTheDocument();
   });
 
-  it("limits interactive controls to the toolbar add buttons (T6)", () => {
+  it("limits interactive controls to toolbar add buttons and timeline transport (T11)", () => {
     const { container } = render(<EditorShell />);
 
-    const buttons = container.querySelectorAll("button");
-    expect(buttons).toHaveLength(3);
+    const buttons = [...container.querySelectorAll("button")];
+    // Toolbar: 3 add buttons. Timeline: Play/Pause/Stop transport.
+    expect(buttons).toHaveLength(6);
     for (const button of buttons) {
-      expect(button.getAttribute("aria-label")).toMatch(/^Add \w+ element$/);
+      expect(button.getAttribute("aria-label")).toMatch(
+        /^(Add \w+ element|Play|Pause|Stop)$/,
+      );
     }
-    // No interactive controls outside the toolbar.
+    // No interactive controls in the workspace or properties panel.
     expect(
       container.querySelectorAll(
-        "main button, main a, main input, aside button, aside input, section[aria-label=Timeline] button",
+        "main button, main a, main input, aside button, aside input",
       ),
     ).toHaveLength(0);
   });

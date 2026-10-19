@@ -4,8 +4,10 @@ import {
   effectiveDurationMs,
   elementEffectiveDurationMs,
   findKeyframeSpan,
+  fractionToTime,
   keyframesForProperty,
   segmentProgress,
+  timeToFraction,
 } from "./timeline";
 import { createKeyframe, createElement, createProject } from "@/project/defaults";
 import type { Keyframe, SceneElement } from "@/project/model";
@@ -212,5 +214,44 @@ describe("elementEffectiveDurationMs", () => {
     const [first] = project.elements;
     expect(elementEffectiveDurationMs(first)).toBe(3000);
     expect(elementEffectiveDurationMs(project.elements[1])).toBe(0);
+  });
+});
+
+describe("timeToFraction / fractionToTime", () => {
+  it("maps time to a normalized fraction with boundaries", () => {
+    expect(timeToFraction(0, 5000)).toBe(0);
+    expect(timeToFraction(2500, 5000)).toBe(0.5);
+    expect(timeToFraction(5000, 5000)).toBe(1);
+  });
+
+  it("clamps out-of-range times", () => {
+    expect(timeToFraction(-100, 5000)).toBe(0);
+    expect(timeToFraction(9000, 5000)).toBe(1);
+  });
+
+  it("maps fractions back to times, clamped at the boundaries", () => {
+    expect(fractionToTime(0, 5000)).toBe(0);
+    expect(fractionToTime(0.5, 5000)).toBe(2500);
+    expect(fractionToTime(1, 5000)).toBe(5000);
+    expect(fractionToTime(-0.5, 5000)).toBe(0);
+    expect(fractionToTime(1.5, 5000)).toBe(5000);
+    expect(fractionToTime(0.333, 5000)).toBeCloseTo(1665, 6);
+  });
+
+  it("round-trips through both directions", () => {
+    for (const timeMs of [0, 1250, 2500, 4999, 5000]) {
+      expect(fractionToTime(timeToFraction(timeMs, 5000), 5000)).toBe(
+        Math.min(Math.max(timeMs, 0), 5000),
+      );
+    }
+  });
+
+  it("throws RangeError for invalid inputs", () => {
+    expect(() => timeToFraction(Number.NaN, 5000)).toThrow(RangeError);
+    expect(() => timeToFraction(0, 0)).toThrow(RangeError);
+    expect(() => timeToFraction(0, -1)).toThrow(RangeError);
+    expect(() => fractionToTime(Number.NaN, 5000)).toThrow(RangeError);
+    expect(() => fractionToTime(0.5, Number.NaN)).toThrow(RangeError);
+    expect(() => fractionToTime(0.5, 0)).toThrow(RangeError);
   });
 });
