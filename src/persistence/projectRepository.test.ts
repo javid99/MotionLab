@@ -5,6 +5,7 @@ import {
   DEFAULT_PROJECT_DB_NAME,
 } from "./projectRepository";
 import { createElement, createProject } from "@/project/defaults";
+import { ProjectValidationError } from "@/project/validate";
 import type { Project } from "@/project/model";
 
 /**
@@ -178,6 +179,108 @@ describe("projectRepository — persistence across calls and databases", () => {
     expect(
       await createProjectRepository(DEFAULT_PROJECT_DB_NAME).get(project.id),
     ).toEqual(project);
+  });
+});
+
+describe("projectRepository — validation on read (T13)", () => {
+  /** Seeds a record bypassing types: `put` stores documents as-is. */
+  async function seed(dbName: string, records: unknown[]): Promise<void> {
+    const repository = createProjectRepository(dbName);
+    for (const record of records) {
+      await repository.put(record as Project);
+    }
+  }
+
+  it("valid records still round-trip through get and list", async () => {
+    const { repository } = makeRepository();
+    const project = makeProject("Valid");
+    await repository.put(project);
+
+    expect(await repository.get(project.id)).toEqual(project);
+    expect(await repository.list()).toEqual([project]);
+  });
+
+  it("get rejects when the stored record has an unknown element type", async () => {
+    const { repository, dbName } = makeRepository();
+    const project = makeProject("Broken type");
+    const invalid = {
+      ...project,
+      elements: [{ ...project.elements[0], type: "triangle" }],
+    };
+    await seed(dbName, [invalid]);
+
+    await expect(repository.get(project.id)).rejects.toThrow(
+      /Invalid stored project record/,
+    );
+  });
+
+  it("get rejects with validation details preserved as the cause", async () => {
+    const { repository, dbName } = makeRepository();
+    const project = makeProject("Broken keyframe");
+    const invalid = {
+      ...project,
+      elements: [
+        {
+          ...project.elements[0],
+          keyframes: [
+            { id: "kf", property: "x", timeMs: 1.5, value: 0, easing: "linear" },
+          ],
+        },
+      ],
+    };
+    await seed(dbName, [invalid]);
+
+    const error = await repository.get(project.id).then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (rejection: Error) => rejection,
+    );
+    expect(error.message).toMatch(/Invalid stored project record/);
+    const cause = error.cause as ProjectValidationError;
+    expect(cause).toBeInstanceOf(ProjectValidationError);
+    expect(cause.issues.join(" ")).toContain("timeMs must be an integer");
+  });
+
+  it("get rejects when required fields are missing", async () => {
+    const { repository, dbName } = makeRepository();
+    const project = makeProject("Missing fields");
+    const invalid = { ...project };
+    delete (invalid as Record<string, unknown>).canvas;
+    await seed(dbName, [invalid]);
+
+    const error = await repository.get(project.id).then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (rejection: Error) => rejection,
+    );
+    expect(error.message).toMatch(/Invalid stored project record/);
+    expect((error.cause as ProjectValidationError).issues).toContainEqual(
+      "project.canvas must be an object",
+    );
+  });
+
+  it("list rejects when any stored record is invalid instead of skipping it", async () => {
+    dbCounter += 1;
+    const dbName = `motionlab-test-list-${dbCounter}`;
+    const repository = createProjectRepository(dbName);
+    const valid = makeProject("Valid");
+    const invalid = {
+      ...makeProject("Invalid"),
+      durationMs: 0,
+    };
+    await seed(dbName, [valid, invalid]);
+
+    await expect(repository.list()).rejects.toThrow(
+      /Invalid stored project record/,
+    );
+  });
+
+  it("get still resolves null for a missing id after validation is wired", async () => {
+    const { repository } = makeRepository();
+
+    expect(await repository.get("no-such-id")).toBeNull();
   });
 });
 

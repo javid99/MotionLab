@@ -2,8 +2,9 @@
  * Promise-based IndexedDB repository for MotionLab projects (T12).
  *
  * - One object store `projects` keyed by `Project.id` (ARCHITECTURE.md,
- *   "Storage"). Runtime validation of records loaded from the database is
- *   wired in T13; this module persists and returns documents as stored.
+ *   "Storage"). Records read via `get`/`list` are validated at runtime
+ *   (T13) before being returned; invalid records reject with a descriptive
+ *   error and are never skipped, repaired, or defaulted.
  * - Every operation opens its own connection, runs one transaction, and
  *   closes the connection in `finally`. Database and transaction failures
  *   reject — errors are never swallowed.
@@ -16,6 +17,7 @@
  */
 
 import type { Project } from "@/project/model";
+import { validateProject } from "@/project/validate";
 
 export const PROJECT_DB_VERSION = 1;
 export const PROJECT_STORE_NAME = "projects";
@@ -105,14 +107,41 @@ export function createProjectRepository(
     }
   }
 
+  /**
+   * Validates a record read from storage before it reaches callers (T13).
+   * Invalid records reject with the record's label and the full validation
+   * error as `cause` — they are never skipped, repaired, or defaulted.
+   */
+  function parseStoredProject(record: unknown, label: string): Project {
+    try {
+      return validateProject(record);
+    } catch (cause) {
+      throw new Error(`Invalid stored project record (${label})`, {
+        cause,
+      });
+    }
+  }
+
   return {
     put: (project) =>
       withStore<void>("readwrite", (store) => store.put(project)),
-    get: async (id) =>
-      (await withStore<Project | undefined>("readonly", (store) =>
+    get: async (id) => {
+      const record = await withStore<unknown>("readonly", (store) =>
         store.get(id),
-      )) ?? null,
-    list: () => withStore<Project[]>("readonly", (store) => store.getAll()),
+      );
+      if (record === undefined) {
+        return null;
+      }
+      return parseStoredProject(record, `id "${id}"`);
+    },
+    list: async () => {
+      const records = await withStore<unknown[]>("readonly", (store) =>
+        store.getAll(),
+      );
+      return records.map((record, index) =>
+        parseStoredProject(record, `index ${index}`),
+      );
+    },
     delete: (id) =>
       withStore<void>("readwrite", (store) => store.delete(id)),
   };

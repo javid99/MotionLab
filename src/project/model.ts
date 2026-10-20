@@ -7,6 +7,14 @@
 
 export type Easing = "linear" | "ease-in" | "ease-out" | "ease-in-out";
 
+/** Runtime list of the easing names (type-checked against the union). */
+export const EASINGS = [
+  "linear",
+  "ease-in",
+  "ease-out",
+  "ease-in-out",
+] as const satisfies readonly Easing[];
+
 /** Numeric properties the engine can animate. */
 export type AnimatableProperty =
   | "x"
