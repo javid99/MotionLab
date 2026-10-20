@@ -4,6 +4,7 @@ import EditorToolbar from "./EditorToolbar";
 import { useEditorStore } from "@/editor/editorStore";
 import { useProjectStore } from "@/editor/projectStore";
 import { createProject } from "@/project/defaults";
+import { createMemoryProjectRepository } from "../../../tests/helpers/memoryProjectRepository";
 
 function resetStores(): void {
   useProjectStore.setState({ project: createProject() });
@@ -68,5 +69,34 @@ describe("EditorToolbar — add element actions", () => {
     render(<EditorToolbar />);
 
     expect(screen.getByText("Intro")).toBeInTheDocument();
+  });
+});
+
+describe("EditorToolbar — save project (T14)", () => {
+  it("persists the current project through the repository", async () => {
+    const repository = createMemoryProjectRepository();
+    useProjectStore.setState({ project: createProject({ name: "To save" }) });
+    render(<EditorToolbar repository={repository} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save project" }));
+
+    expect(await screen.findByTestId("save-state")).toHaveTextContent("Saved");
+    const [stored] = repository.projects.values();
+    expect(stored?.name).toBe("To save");
+    expect(stored).toEqual(useProjectStore.getState().project);
+  });
+
+  it("shows an error state when saving fails", async () => {
+    const repository = createMemoryProjectRepository();
+    repository.put = async () => {
+      throw new Error("db unavailable");
+    };
+    render(<EditorToolbar repository={repository} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save project" }));
+
+    expect(await screen.findByTestId("save-state")).toHaveTextContent(
+      "Save failed",
+    );
   });
 });

@@ -1,14 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import { useEditorStore } from "@/editor/editorStore";
 import { useProjectStore } from "@/editor/projectStore";
+import {
+  createProjectRepository,
+  type ProjectRepository,
+} from "@/persistence/projectRepository";
 import { createElement } from "@/project/defaults";
 import type { SceneElement } from "@/project/model";
 
 /**
- * Top toolbar strip (T6): the rect/ellipse/text chips are functional add
- * buttons wired to the project store and selection; "Select"/"Move" remain
- * structural placeholders (plain spans) until tool modes exist.
+ * Top toolbar strip: the rect/ellipse/text chips are functional add buttons
+ * wired to the project store and selection; "Select"/"Move" remain
+ * structural placeholders (plain spans) until tool modes exist. The Save
+ * button (T14) persists the current project through the repository so a
+ * saved project survives a full reload.
  */
 
 const TOOLS = ["Select", "Move"] as const;
@@ -18,6 +25,8 @@ const ADDABLE: Array<{ type: SceneElement["type"]; label: string }> = [
   { type: "ellipse", label: "Ellipse" },
   { type: "text", label: "Text" },
 ];
+
+const defaultRepository = createProjectRepository();
 
 function LogoMark() {
   return (
@@ -47,10 +56,19 @@ function LogoMark() {
   );
 }
 
-export default function EditorToolbar() {
+export default function EditorToolbar({
+  repository: repositoryProp,
+}: {
+  /** Test injection point; defaults to the real IndexedDB repository. */
+  repository?: ProjectRepository;
+} = {}) {
+  const repository = repositoryProp ?? defaultRepository;
   const projectName = useProjectStore((s) => s.project.name);
   const addElement = useProjectStore((s) => s.addElement);
   const select = useEditorStore((s) => s.select);
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "error">(
+    "idle",
+  );
 
   function handleAdd(type: SceneElement["type"]): void {
     // Narrow the type literal so the overloaded factory resolves per type.
@@ -62,6 +80,15 @@ export default function EditorToolbar() {
           : createElement("text");
     if (addElement(element)) {
       select(element.id);
+    }
+  }
+
+  async function handleSave(): Promise<void> {
+    try {
+      await repository.put(useProjectStore.getState().project);
+      setSaveState("saved");
+    } catch {
+      setSaveState("error");
     }
   }
 
@@ -99,6 +126,33 @@ export default function EditorToolbar() {
           </button>
         ))}
       </div>
+      <button
+        type="button"
+        aria-label="Save project"
+        onClick={() => {
+          void handleSave();
+        }}
+        className="rounded-md border border-neutral-700 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-800 focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-400"
+      >
+        Save
+      </button>
+      {saveState === "saved" ? (
+        <span
+          aria-live="polite"
+          data-testid="save-state"
+          className="text-xs text-sky-300"
+        >
+          Saved
+        </span>
+      ) : saveState === "error" ? (
+        <span
+          aria-live="polite"
+          data-testid="save-state"
+          className="text-xs text-red-400"
+        >
+          Save failed
+        </span>
+      ) : null}
       <span className="ml-auto text-xs text-neutral-500">{projectName}</span>
     </header>
   );
