@@ -158,10 +158,12 @@ T17 remains scoped post-v1 by ADR-010 (Undo/Redo deferred).
 
 ### T15. CSS keyframes exporter — TODO (P0)
 - **Depends on:** T9 (evaluator), T1 (static geometry for transform-origin
-  centers). Contract approved (ADR-008, ACCEPTED 2026-10-12).
+  centers). Contract approved (ADR-008; revised 2026-10-21, owner-approved
+  Option A: independently animated registered custom properties per
+  component).
 - `src/export/cssExporter.ts`: `Project → CSS string` (pure TS) per the
-  ADR-008 contract (per-element property groups: transform group + opacity
-  group).
+  revised ADR-008 contract (one `@property` + `@keyframes` per animated
+  property; opacity native; element rule composes via var()/calc()).
 - **AC:**
   - Emitted keyframe percentages follow the ADR-008 rounding rule
     (≤ 6 decimal places, trailing zeros trimmed) and are exact for fixture
@@ -177,19 +179,23 @@ T17 remains scoped post-v1 by ADR-010 (Undo/Redo deferred).
     in offset windows asserted exactly.
   - **Multi-property scenarios (required fixtures):**
     - x and opacity animated with different keyframe times and easings →
-      two animations (transform group + opacity group), each preserving its
-      own times/easings independently.
-    - x and y animated with different keyframe times → one transform-group
-      animation; per-property timing preserved with no union fill.
+      two independent per-property animations, each preserving its
+      own times/easings exactly.
+    - x and y animated with different keyframe times → independent
+      per-property animations; foreign keyframe times never split or
+      re-time the other property's segments (per-property timing preserved
+      exactly).
     - x and y starting segments at the same `timeMs` with different easings
-      → easing-conflict offset applied per ADR-008; values at authored
-      keyframe times exact; equivalence holds at sampled times.
+      → each property keeps its own easing in its own rule (structurally
+      conflict-free per the revised ADR-008); values at authored keyframe
+      times exact; equivalence holds at sampled times.
     - an authored keyframe at `0` (or `durationMs`) on one property while
-      others have no endpoints → single merged `0%`/`100%` blocks with
-      authored easing.
+      others have no endpoints → single merged `0%`/`100%` blocks per
+      property with authored easing.
   - Per-segment easing appears as `animation-timing-function` inside the
-    matching keyframe block; the transform group is one animation and
-    `opacity` is a separate animation (never mixed in one rule).
+    matching keyframe block; each animated property has its own
+    `@keyframes` rule and `opacity` is a native CSS property animation
+    (properties never share a rule).
   - The transform declaration matches the renderer's composition order and
     origin (shared matrix test with T5); exported rules carry
     `transform-box: view-box` and the explicit user-unit

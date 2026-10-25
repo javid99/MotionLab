@@ -74,16 +74,52 @@ SUPERSEDED.
   milliseconds (`timeMs`, `durationMs`). The UI may present seconds/frames but
   converts at the boundary.
 
-## ADR-008 — CSS export contract (per-element property groups, per-segment easing)
+## ADR-008 — CSS export contract (per-property custom-property animation)
 
 - **Status:** ACCEPTED (owner approval, 2026-10-12, incl. the text layout
-  constants below).
-- **Chosen approach: per-element property groups.** A single animation per
+  constants below). **Revised 2026-10-21** (owner approval, Option A): the
+  per-element transform-group format is replaced by independently animated,
+  registered CSS custom properties — see the Revision below.
+- **Revision (2026-10-21, owner-approved):** during T15 a mathematical
+  conflict was found inside this ADR: a single `transform` CSS property
+  cannot preserve per-property keyframe timing when components' keyframe
+  times interleave. Every `transform` declaration carries all five
+  components, so a foreign block re-declares a component (splitting its
+  segment) and imposes the foreign block's easing; e.g. x eased `ease-in`
+  over 0→1000 ms interleaved with a y block at 500 ms exports ≈65.77 where
+  the engine produces ≈60.16 at 750 ms. Decision (Option A):
+  - One `@property` per animated transform component
+    (`--mlab-x`, `--mlab-y`, `--mlab-rotation`, `--mlab-scale-x`,
+    `--mlab-scale-y`; syntax `<number>`, `inherits: false`,
+    `initial-value: 0`), emitted once per used property.
+  - One `@keyframes` rule per animated property (`mlab-<elementId>-x`,
+    `-y`, `-rotation`, `-scale-x`, `-scale-y`, `mlab-<elementId>-opacity`)
+    declaring `--mlab-*: <value>;` — or native `opacity: <value>;` for the
+    opacity rule. Per-property timing is fully independent: foreign
+    keyframe times never split or re-time another property's segment. The
+    easing-conflict offset clause is superseded (such conflicts are
+    structurally impossible under this design).
+  - The element rule composes
+    `transform: translate(calc(var(--mlab-x, <bx>) * 1px), calc(var(--mlab-y, <by>) * 1px)) rotate(calc(var(--mlab-rotation, <br>) * 1deg)) scale(calc(var(--mlab-scale-x, <bsx>)), calc(var(--mlab-scale-y, <bsy>)))`
+    with the unchanged `transform-box: view-box` and local-center
+    `transform-origin`; the var() fallbacks carry the element's base
+    values, so the transform matrix-equivalence contract below is
+    unchanged. `opacity` stays a native CSS property animation.
+  - The endpoint rule (emitted `0%`/`100%` values equal
+    `evaluate(project, 0)` / `evaluate(project, durationMs)`; authored
+    keyframes at the endpoints merge into one block per percentage per
+    property), the percentage precision and collision-merging rules, and
+    the fidelity claim are unchanged, applied per property.
+  - Browser compatibility: `@property` requires evergreen browsers
+    (Chrome/Edge 85+, Safari 16.4+, Firefox 128+); degradation in older
+    engines (discrete custom-property animation) is out of scope for v1.
+- **Chosen approach (superseded 2026-10-21 — see Revision):** per-element
+  property groups. A single animation per
   element cannot express independent keyframe times and easings for multiple
   properties (one keyframe block carries one `animation-timing-function`),
   and the five transform properties cannot be separate animations (each
   would declare `transform`; with multiple animations on one element, the
-  last one wins). Properties are therefore partitioned into groups:
+  last one wins). Properties were therefore partitioned into groups:
   - **Transform group** — `x`, `y`, `rotation`, `scaleX`, `scaleY` → one
     `@keyframes` rule animating the single `transform` property.
   - **Opacity group** — `opacity` → its own `@keyframes` rule. As a separate
@@ -95,7 +131,9 @@ SUPERSEDED.
     Rule naming: `mlab-<elementId>-transform`, `mlab-<elementId>-opacity`.
   - Elements with no animated properties get no `@keyframes` and no
     `animation` declarations.
-- **Independent keyframe times within a group:** each property is declared
+- **Independent keyframe times within a group (superseded 2026-10-21 — the
+  revised per-property design achieves this exactly):** each property is
+  declared
   only at its own authored keyframe percentages plus the generated
   `0%`/`100%` endpoints. CSS interpolates a property between the keyframes
   that declare it, so no union-of-boundaries fill is required and
@@ -104,7 +142,9 @@ SUPERSEDED.
   functions; `animation-timing-function` inside a keyframe block applies to
   the segment starting at that block (CSS pairs each property with the
   blocks that declare it), matching our keyframe model.
-- **Easing conflicts within the transform group:** if two transform
+- **Easing conflicts within the transform group (superseded 2026-10-21 —
+  structurally impossible under the revised per-property design):** if two
+  transform
   properties start segments at the same `timeMs` with different easings, one
   merged block cannot carry both timing functions. Resolution: the property
   first in alphabetical order keeps the block at `timeMs`; the other is also
