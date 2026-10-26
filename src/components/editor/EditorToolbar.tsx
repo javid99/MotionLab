@@ -9,6 +9,7 @@ import {
 } from "@/persistence/projectRepository";
 import { createElement } from "@/project/defaults";
 import type { SceneElement } from "@/project/model";
+import ExportDialog from "./ExportDialog";
 
 /**
  * Top toolbar strip: the rect/ellipse/text chips are functional add buttons
@@ -69,6 +70,7 @@ export default function EditorToolbar({
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">(
     "idle",
   );
+  const [exportOpen, setExportOpen] = useState(false);
 
   function handleAdd(type: SceneElement["type"]): void {
     // Narrow the type literal so the overloaded factory resolves per type.
@@ -136,6 +138,14 @@ export default function EditorToolbar({
       >
         Save
       </button>
+      <button
+        type="button"
+        aria-label="Export CSS"
+        onClick={() => setExportOpen(true)}
+        className="rounded-md border border-neutral-700 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-800 focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-400"
+      >
+        Export CSS
+      </button>
       {saveState === "saved" ? (
         <span
           aria-live="polite"
@@ -154,6 +164,7 @@ export default function EditorToolbar({
         </span>
       ) : null}
       <span className="ml-auto text-xs text-neutral-500">{projectName}</span>
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
     </header>
   );
 }

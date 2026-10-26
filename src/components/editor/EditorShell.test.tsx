@@ -64,15 +64,15 @@ describe("EditorShell", () => {
     expect(within(timeline).getByText("No keyframes yet.")).toBeInTheDocument();
   });
 
-  it("limits interactive controls to toolbar actions and timeline transport (T14)", () => {
+  it("limits interactive controls to toolbar actions and timeline transport (T16)", () => {
     const { container } = render(<EditorShell />);
 
     const buttons = [...container.querySelectorAll("button")];
-    // Toolbar: 3 add buttons + Save. Timeline: Play/Pause/Stop transport.
-    expect(buttons).toHaveLength(7);
+    // Toolbar: 3 add buttons + Save + Export CSS. Timeline: transport.
+    expect(buttons).toHaveLength(8);
     for (const button of buttons) {
       expect(button.getAttribute("aria-label")).toMatch(
-        /^(Add \w+ element|Play|Pause|Stop|Save project)$/,
+        /^(Add \w+ element|Play|Pause|Stop|Save project|Export CSS)$/,
       );
     }
     // No interactive controls in the workspace or properties panel.
