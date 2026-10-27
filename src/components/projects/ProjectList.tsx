@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   createProjectRepository,
   type ProjectRepository,
@@ -17,6 +18,8 @@ import { useProjectStore } from "@/editor/projectStore";
  * records surface as an error state, never as fabricated data). Deleting the
  * project currently held by the editor's store resets the store so deleted
  * data cannot resurface ("deleting current project handled gracefully").
+ * Creation persists a fresh project immediately, then opens the editor with
+ * its id, so saving in the editor can never overwrite an unrelated project.
  */
 
 const defaultRepository = createProjectRepository();
@@ -28,8 +31,13 @@ interface ProjectListProps {
 
 export default function ProjectList({ repository: repositoryProp }: ProjectListProps = {}) {
   const repository = repositoryProp ?? defaultRepository;
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
+  const [creating, setCreating] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
@@ -40,9 +48,10 @@ export default function ProjectList({ repository: repositoryProp }: ProjectListP
       setError(null);
     } catch (cause) {
       setProjects([]);
-      setError(
-        cause instanceof Error ? cause.message : "Failed to load projects",
-      );
+      setError({
+        title: "Failed to load projects",
+        message: cause instanceof Error ? cause.message : "Unknown error",
+      });
     }
   }, [repository]);
 
@@ -58,11 +67,10 @@ export default function ProjectList({ repository: repositoryProp }: ProjectListP
       } catch (cause) {
         if (!cancelled) {
           setProjects([]);
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Failed to load projects",
-          );
+          setError({
+            title: "Failed to load projects",
+            message: cause instanceof Error ? cause.message : "Unknown error",
+          });
         }
       }
     })();
@@ -70,6 +78,25 @@ export default function ProjectList({ repository: repositoryProp }: ProjectListP
       cancelled = true;
     };
   }, [repository]);
+
+  async function createProjectAndOpen(): Promise<void> {
+    if (creating) {
+      return;
+    }
+    setCreating(true);
+    const project = createProject();
+    try {
+      await repository.put(project);
+      router.push(`/editor?id=${project.id}`);
+    } catch (cause) {
+      setError({
+        title: "Failed to create project",
+        message: cause instanceof Error ? cause.message : "Unknown error",
+      });
+    } finally {
+      setCreating(false);
+    }
+  }
 
   async function commitRename(project: Project): Promise<void> {
     const name = renameValue.trim();
@@ -110,10 +137,27 @@ export default function ProjectList({ repository: repositoryProp }: ProjectListP
       aria-label="Projects"
       className="mx-auto w-full max-w-2xl px-6 py-10"
     >
-      <h1 className="text-lg font-semibold tracking-tight text-neutral-100">
-        MotionLab
-      </h1>
-      <p className="mt-1 text-xs text-neutral-500">Your motion design projects</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight text-neutral-100">
+            MotionLab
+          </h1>
+          <p className="mt-1 text-xs text-neutral-500">
+            Your motion design projects
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Create project"
+          onClick={() => {
+            void createProjectAndOpen();
+          }}
+          disabled={creating}
+          className="rounded-md bg-sky-500/90 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-sky-400 disabled:opacity-60 focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-400"
+        >
+          New project
+        </button>
+      </div>
 
       {error !== null ? (
         <div
@@ -121,8 +165,8 @@ export default function ProjectList({ repository: repositoryProp }: ProjectListP
           data-testid="projects-error"
           className="mt-6 rounded-lg border border-red-900/60 bg-red-950/30 p-4"
         >
-          <p className="text-sm text-red-300">Failed to load projects</p>
-          <p className="mt-1 text-xs text-red-400/80">{error}</p>
+          <p className="text-sm text-red-300">{error.title}</p>
+          <p className="mt-1 text-xs text-red-400/80">{error.message}</p>
           <button
             type="button"
             aria-label="Retry loading projects"
@@ -139,9 +183,25 @@ export default function ProjectList({ repository: repositoryProp }: ProjectListP
           Loading projects&hellip;
         </p>
       ) : projects.length === 0 ? (
-        <p className="mt-6 text-sm text-neutral-400" data-testid="projects-empty">
-          No projects yet.
-        </p>
+        <div
+          data-testid="projects-empty"
+          className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-center"
+        >
+          <p className="text-sm text-neutral-400">No projects yet.</p>
+          <p className="mt-1 text-xs text-neutral-500">
+            Create your first project to start animating.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void createProjectAndOpen();
+            }}
+            disabled={creating}
+            className="mt-4 rounded-md bg-sky-500/90 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-sky-400 disabled:opacity-60 focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-400"
+          >
+            Create your first project
+          </button>
+        </div>
       ) : (
         <ul className="mt-6 space-y-2">
           {projects.map((project) => (

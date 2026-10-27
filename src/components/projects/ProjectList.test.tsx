@@ -1,6 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "fake-indexeddb/auto";
+
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
+
 import ProjectList from "./ProjectList";
 import {
   createProjectRepository,
@@ -43,6 +49,7 @@ function makeProject(name: string): Project {
 
 beforeEach(() => {
   useProjectStore.setState({ project: createProject() });
+  pushMock.mockReset();
 });
 
 describe("ProjectList — loading, empty, and list states", () => {
@@ -103,6 +110,70 @@ describe("ProjectList — loading, empty, and list states", () => {
     await waitFor(async () => {
       expect(await verify.get(project.id)).toEqual(project);
     });
+  });
+});
+
+describe("ProjectList — create", () => {
+  it("offers a create action in the empty state that persists a valid project and opens the editor", async () => {
+    const { repository, verify } = makeSetup();
+    render(<ProjectList repository={repository} />);
+
+    const emptyState = await screen.findByTestId("projects-empty");
+    fireEvent.click(
+      within(emptyState).getByRole("button", {
+        name: "Create your first project",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledTimes(1);
+    });
+    const pushedUrl = pushMock.mock.calls[0][0] as string;
+    expect(pushedUrl).toMatch(/^\/editor\?id=/);
+    const createdId = pushedUrl.split("id=")[1];
+
+    const stored = await verify.get(createdId);
+    expect(stored).not.toBeNull();
+    expect(stored?.name).toBe("Untitled project");
+    expect(await verify.list()).toHaveLength(1);
+  });
+
+  it("offers a visible create action alongside existing projects", async () => {
+    const { repository, verify } = makeSetup();
+    const project = makeProject("Existing");
+    await seed(repository, [project]);
+    render(<ProjectList repository={repository} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create project" }));
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledTimes(1);
+    });
+    const createdId = (pushMock.mock.calls[0][0] as string).split("id=")[1];
+    expect(createdId).not.toBe(project.id);
+    expect(await verify.list()).toHaveLength(2);
+    expect(await verify.get(createdId)).not.toBeNull();
+  });
+
+  it("does not navigate and surfaces an error when creation fails", async () => {
+    const { repository } = makeSetup();
+    const failing: ProjectRepository = {
+      ...repository,
+      put: () => Promise.reject(new Error("quota exceeded")),
+    };
+    render(<ProjectList repository={failing} />);
+
+    const emptyState = await screen.findByTestId("projects-empty");
+    fireEvent.click(
+      within(emptyState).getByRole("button", {
+        name: "Create your first project",
+      }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Failed to create project");
+    expect(alert).toHaveTextContent("quota exceeded");
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });
 
