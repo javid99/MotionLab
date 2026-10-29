@@ -266,7 +266,8 @@ export default function CanvasPlaceholder() {
           <div className="m-auto text-center">
             <p className="text-sm font-medium text-neutral-400">Canvas</p>
             <p className="mt-1 text-xs text-neutral-500">
-              Add elements to start composing your scene.
+              Use the Rect, Ellipse, or Text buttons in the toolbar above to
+              add your first element.
             </p>
           </div>
         ) : (

@@ -41,7 +41,9 @@ describe("EditorShell", () => {
 
     const workspace = screen.getByRole("main", { name: "Editor workspace" });
     expect(
-      within(workspace).getByText("Add elements to start composing your scene."),
+      within(workspace).getByText(
+        "Use the Rect, Ellipse, or Text buttons in the toolbar above to add your first element.",
+      ),
     ).toBeInTheDocument();
     expect(
       within(workspace).getByRole("region", { name: "Canvas" }),
@@ -62,6 +64,19 @@ describe("EditorShell", () => {
 
     const timeline = screen.getByRole("region", { name: "Timeline" });
     expect(within(timeline).getByText("No keyframes yet.")).toBeInTheDocument();
+  });
+
+  it("height-bounds the timeline so it cannot overlap the workspace", () => {
+    // jsdom performs no layout, so this asserts the sizing contract behind
+    // the real-browser regression: a full-height (`h-full`) timeline root
+    // collapsed the `flex-1` workspace region and made the panels overlap,
+    // so canvas clicks hit the timeline and transport buttons hit the
+    // canvas. The root must use a max-height bound instead.
+    render(<EditorShell />);
+
+    const timeline = screen.getByRole("region", { name: "Timeline" });
+    expect(timeline.className).toContain("max-h-[45dvh]");
+    expect(timeline.className).not.toContain("h-full");
   });
 
   it("limits interactive controls to toolbar actions and timeline transport (T16)", () => {

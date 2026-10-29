@@ -60,7 +60,9 @@ describe("CanvasPlaceholder — empty state and rendering", () => {
     render(<CanvasPlaceholder />);
 
     expect(
-      screen.getByText("Add elements to start composing your scene."),
+      screen.getByText(
+        "Use the Rect, Ellipse, or Text buttons in the toolbar above to add your first element.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("canvas-surface")).toBeNull();
   });

@@ -32,6 +32,11 @@ import {
  * Time↔position mapping goes through the pure engine helpers
  * `timeToFraction`/`fractionToTime`; pixel fractions are clamped to [0, 1]
  * and re-measured from the lane rect on every event (resize-safe).
+ *
+ * Layout contract: this section is a flex item of the `h-dvh flex-col`
+ * editor shell and must stay height-bounded (max-h, never h-full) — a full
+ * -height root collapsed the workspace region and made the panels overlap,
+ * so pointer events landed on the wrong panel.
  */
 
 interface KeyframeDrag {
@@ -156,7 +161,7 @@ export default function TimelineStrip({
   }
 
   return (
-    <section aria-label="Timeline" className="flex h-full min-h-0 flex-col">
+    <section aria-label="Timeline" className="flex max-h-[45dvh] min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-neutral-800 px-4 py-1.5">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
           Timeline
