@@ -3,6 +3,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useEditorStore } from "@/editor/editorStore";
 import { useProjectStore } from "@/editor/projectStore";
+import { evaluate } from "@/engine/evaluator";
 import { screenToScene, type Point } from "@/lib/coords";
 import {
   getElementSize,
@@ -10,7 +11,6 @@ import {
   type Size,
 } from "@/lib/elementTransform";
 import type {
-  EvaluatedElement,
   EvaluatedScene,
   Project,
   SceneElement,
@@ -22,9 +22,12 @@ import SceneRenderer from "@/render/SceneRenderer";
  * Interactive canvas region (T6): renders the current project through the
  * prop-driven SceneRenderer and supports click-select, drag-move, and
  * corner-handle resize for the selected element. In-flight drag state is
- * component-local and transient; the project store is written exactly once,
- * when the gesture commits on pointer-up. All coordinate-space conversion
- * goes through `src/lib/coords.ts`.
+ * component-local and transient; the project store is written only when the
+ * gesture commits on pointer-up. The rendered scene is the engine's
+ * `evaluate(project, playheadMs)` output (not the base transform), so
+ * keyframes authored in the properties panel or timeline are visible on the
+ * canvas while scrubbing/playing. All coordinate-space conversion goes
+ * through `src/lib/coords.ts`.
  */
 
 interface MoveDrag {
@@ -44,31 +47,6 @@ interface ResizeDrag {
 }
 
 type DragState = MoveDrag | ResizeDrag | null;
-
-/**
- * Builds the evaluated scene from base values. Interim until the animation
- * engine (T9) supplies real evaluation — no keyframes can be authored yet.
- */
-function deriveScene(
-  project: Project,
-  override?: { id: string; transform: Transform },
-): EvaluatedScene {
-  return {
-    timeMs: 0,
-    elements: project.elements.map(
-      (element): EvaluatedElement => ({
-        id: element.id,
-        type: element.type,
-        visible: element.visible,
-        transform:
-          override && override.id === element.id
-            ? { ...override.transform }
-            : { ...element.transform },
-        opacity: element.style.opacity,
-      }),
-    ),
-  };
-}
 
 function withGeometry(element: SceneElement, size: Size): SceneElement {
   switch (element.type) {
@@ -97,9 +75,11 @@ function committedSize(drag: ResizeDrag): Size {
 export default function CanvasPlaceholder() {
   const project = useProjectStore((s) => s.project);
   const updateElement = useProjectStore((s) => s.updateElement);
+  const setAnimatableValue = useProjectStore((s) => s.setAnimatableValue);
   const selectedId = useEditorStore((s) => s.selectedElementId);
   const select = useEditorStore((s) => s.select);
   const view = useEditorStore((s) => s.view);
+  const playheadMs = useEditorStore((s) => s.playheadMs);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [drag, setDrag] = useState<DragState>(null);
 
@@ -127,7 +107,17 @@ export default function CanvasPlaceholder() {
           ),
         }
       : project;
-  const displayScene = deriveScene(displayProject, moveOverride);
+  const evaluatedScene = evaluate(displayProject, playheadMs);
+  const displayScene: EvaluatedScene = moveOverride
+    ? {
+        ...evaluatedScene,
+        elements: evaluatedScene.elements.map((el) =>
+          el.id === moveOverride.id
+            ? { ...el, transform: { ...moveOverride.transform } }
+            : el,
+        ),
+      }
+    : evaluatedScene;
 
   const selectedDisplay = selectedId
     ? displayProject.elements.find((el) => el.id === selectedId)
@@ -185,11 +175,18 @@ export default function CanvasPlaceholder() {
       const element = project.elements.find((el) => el.id === elementId);
       select(elementId);
       if (element) {
+        // The drag starts from the value currently on screen (the evaluated
+        // value at the playhead), not the masked base transform.
+        const evaluated = evaluate(project, playheadMs).elements.find(
+          (el) => el.id === element.id,
+        );
         setDrag({
           kind: "move",
           id: element.id,
           startScene: scenePoint,
-          base: { ...element.transform },
+          base: evaluated
+            ? { ...evaluated.transform }
+            : { ...element.transform },
           currentScene: scenePoint,
         });
         capturePointer(event);
@@ -212,13 +209,15 @@ export default function CanvasPlaceholder() {
       return;
     }
     if (drag.kind === "move") {
-      updateElement(drag.id, {
-        transform: {
-          ...drag.base,
-          x: drag.base.x + (drag.currentScene.x - drag.startScene.x),
-          y: drag.base.y + (drag.currentScene.y - drag.startScene.y),
-        },
-      });
+      const dx = drag.currentScene.x - drag.startScene.x;
+      const dy = drag.currentScene.y - drag.startScene.y;
+      // A click-select without movement must not commit (and must not create
+      // a keyframe on an already-animated property).
+      if (dx !== 0 || dy !== 0) {
+        const timeMs = Math.round(playheadMs);
+        setAnimatableValue(drag.id, "x", drag.base.x + dx, timeMs);
+        setAnimatableValue(drag.id, "y", drag.base.y + dy, timeMs);
+      }
     } else {
       const size = committedSize(drag);
       const element = project.elements.find((el) => el.id === drag.id);

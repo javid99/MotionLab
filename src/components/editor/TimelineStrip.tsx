@@ -206,17 +206,26 @@ export default function TimelineStrip({
 
       {project.elements.length === 0 ? (
         <div className="flex flex-1 items-center justify-center px-4">
-          <p className="text-xs text-neutral-500">No keyframes yet.</p>
+          <p className="text-xs text-neutral-500">
+            No keyframes yet. Add an element, then click one of its property
+            lanes to place a keyframe.
+          </p>
         </div>
       ) : (
-        <div
-          data-testid="timeline-body"
-          className="relative min-h-0 flex-1 overflow-y-auto"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-        >
-          <div className="relative pb-2">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <p className="border-b border-neutral-800 px-4 py-1 text-[10px] leading-4 text-neutral-500">
+            Click a lane to add a keyframe at that time &middot; drag a diamond
+            to retime &middot; click the ruler to scrub. The diamond buttons in
+            Properties add keyframes at the playhead.
+          </p>
+          <div
+            data-testid="timeline-body"
+            className="relative min-h-0 flex-1 overflow-y-auto"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+          >
+            <div className="relative pb-2">
             <div className="flex border-b border-neutral-800">
               <div className="w-20 shrink-0" />
               <div
@@ -281,16 +290,17 @@ export default function TimelineStrip({
               </div>
             ))}
 
-            <div
-              aria-hidden="true"
-              data-testid="playhead-overlay"
-              className="pointer-events-none absolute bottom-0 left-20 right-0 top-0"
-            >
               <div
-                data-testid="playhead-line"
-                className="absolute bottom-0 top-0 w-px bg-sky-400"
-                style={{ left: `${playheadFraction * 100}%` }}
-              />
+                aria-hidden="true"
+                data-testid="playhead-overlay"
+                className="pointer-events-none absolute bottom-0 left-20 right-0 top-0"
+              >
+                <div
+                  data-testid="playhead-line"
+                  className="absolute bottom-0 top-0 w-px bg-sky-400"
+                  style={{ left: `${playheadFraction * 100}%` }}
+                />
+              </div>
             </div>
           </div>
         </div>

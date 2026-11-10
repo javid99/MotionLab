@@ -100,7 +100,7 @@ describe("TimelineStrip — static structure", () => {
     resetStores(createProject());
     render(<TimelineStrip />);
 
-    expect(screen.getByText("No keyframes yet.")).toBeInTheDocument();
+    expect(screen.getByText(/No keyframes yet/)).toBeInTheDocument();
     expect(screen.getByTestId("playhead-readout")).toHaveTextContent(
       "0 / 5000 ms",
     );

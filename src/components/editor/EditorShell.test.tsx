@@ -63,7 +63,7 @@ describe("EditorShell", () => {
     render(<EditorShell />);
 
     const timeline = screen.getByRole("region", { name: "Timeline" });
-    expect(within(timeline).getByText("No keyframes yet.")).toBeInTheDocument();
+    expect(within(timeline).getByText(/No keyframes yet/)).toBeInTheDocument();
   });
 
   it("height-bounds the timeline so it cannot overlap the workspace", () => {

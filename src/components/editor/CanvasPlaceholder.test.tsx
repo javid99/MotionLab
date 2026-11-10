@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import CanvasPlaceholder from "./CanvasPlaceholder";
 import { useEditorStore } from "@/editor/editorStore";
 import { useProjectStore } from "@/editor/projectStore";
-import { createElement, createProject } from "@/project/defaults";
+import {
+  createElement,
+  createKeyframe,
+  createProject,
+} from "@/project/defaults";
 import type { Project } from "@/project/model";
 
 function makeProject(): Project {
@@ -245,5 +249,91 @@ describe("CanvasPlaceholder — stale and edge cases", () => {
 
     expect(screen.getByTestId("canvas-surface")).toBeInTheDocument();
     expect(document.querySelector("[data-resize-handle]")).toBeNull();
+  });
+});
+
+describe("CanvasPlaceholder — animation preview", () => {
+  function animatedRectProject(): Project {
+    return createProject({
+      elements: [
+        createElement("rect", {
+          name: "Box",
+          width: 100,
+          height: 100,
+          transform: { x: 100, y: 50, rotation: 0, scaleX: 1, scaleY: 1 },
+          keyframes: [
+            createKeyframe("x", 0, 100),
+            createKeyframe("x", 1000, 300),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it("renders the evaluated value at the playhead instead of the base transform", () => {
+    const project = animatedRectProject();
+    resetStores(project);
+    useEditorStore.setState({ playheadMs: 500 });
+    render(<CanvasPlaceholder />);
+
+    const el = elementNode(project.elements[0].id);
+    // x at 500 ms = 200 → center (250, 100), size 100×100.
+    expect(el.getAttribute("transform")).toBe(
+      "translate(250 100) rotate(0) scale(1 1) translate(-50 -50)",
+    );
+  });
+
+  it("updates the canvas when the playhead changes without writing the project", () => {
+    const project = animatedRectProject();
+    resetStores(project);
+    render(<CanvasPlaceholder />);
+    const before = useProjectStore.getState().project;
+
+    act(() => {
+      useEditorStore.setState({ playheadMs: 1000 });
+    });
+
+    expect(elementNode(project.elements[0].id).getAttribute("transform")).toBe(
+      "translate(350 100) rotate(0) scale(1 1) translate(-50 -50)",
+    );
+    expect(useProjectStore.getState().project).toBe(before);
+  });
+
+  it("shows text content edits immediately", () => {
+    const text = createElement("text", { name: "Label", text: "Hello" });
+    const project = createProject({ elements: [text] });
+    resetStores(project);
+    useEditorStore.setState({ selectedElementId: text.id });
+    render(<CanvasPlaceholder />);
+
+    expect(elementNode(text.id).textContent).toBe("Hello");
+
+    act(() => {
+      useProjectStore.getState().updateElement(text.id, { text: "Hello world" });
+    });
+
+    expect(elementNode(text.id).textContent).toBe("Hello world");
+  });
+
+  it("writes a keyframe at the playhead when dragging an animated element", () => {
+    const project = animatedRectProject();
+    resetStores(project);
+    useEditorStore.setState({ playheadMs: 500 });
+    render(<CanvasPlaceholder />);
+    const rect = project.elements[0];
+
+    // The element is displayed at x = 200, y = 50 at 500 ms.
+    pointer("pointerdown", elementNode(rect.id), 250, 100);
+    pointer("pointermove", surface(), 300, 100);
+    pointer("pointerup", surface(), 0, 0);
+
+    const element = useProjectStore.getState().project.elements[0];
+    const xTrack = element.keyframes.filter((k) => k.property === "x");
+    expect(xTrack.map((k) => [k.timeMs, k.value])).toEqual([
+      [0, 100],
+      [500, 250],
+      [1000, 300],
+    ]);
+    expect(element.transform.x).toBe(100);
   });
 });

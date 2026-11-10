@@ -602,3 +602,143 @@ describe("projectStore — moveKeyframe", () => {
     expect(store.getState().project).toBe(before);
   });
 });
+
+describe("projectStore — setAnimatableValue", () => {
+  it("writes the base transform while the property has no keyframes", () => {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+
+    const result = store.getState().setAnimatableValue(rectId, "x", 42, 1200);
+
+    expect(result).toBe(true);
+    const element = store.getState().project.elements[0];
+    expect(element.transform).toEqual({
+      x: 42,
+      y: 0,
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+    });
+    expect(element.keyframes).toHaveLength(0);
+    expect(store.getState().project.updatedAt).toMatch(ISO_8601_REGEX);
+  });
+
+  it("writes the base opacity while the opacity track is empty", () => {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+
+    expect(store.getState().setAnimatableValue(rectId, "opacity", 0.4, 0)).toBe(
+      true,
+    );
+
+    const element = store.getState().project.elements[0];
+    expect(element.style).toEqual({ fill: "#808080", opacity: 0.4 });
+    expect(element.keyframes).toHaveLength(0);
+  });
+
+  it("inserts a keyframe once the property has a track, leaving the base value alone", () => {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+    store.getState().addKeyframe(rectId, createKeyframe("x", 0, 10));
+
+    const result = store.getState().setAnimatableValue(rectId, "x", 90, 2000);
+
+    expect(result).toBe(true);
+    const element = store.getState().project.elements[0];
+    expect(getTrack(element, "x").map((k) => [k.timeMs, k.value])).toEqual([
+      [0, 10],
+      [2000, 90],
+    ]);
+    // Base transform untouched: keyframes now drive the evaluated value.
+    expect(element.transform.x).toBe(0);
+  });
+
+  it("keeps the track sorted when inserting at an earlier time", () => {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+    store.getState().addKeyframe(rectId, createKeyframe("rotation", 2000, 45));
+
+    store.getState().setAnimatableValue(rectId, "rotation", 15, 500);
+
+    const track = getTrack(
+      store.getState().project.elements[0],
+      "rotation",
+    );
+    expect(track.map((k) => [k.timeMs, k.value])).toEqual([
+      [500, 15],
+      [2000, 45],
+    ]);
+  });
+
+  it("updates the keyframe already at the playhead, preserving id and easing", () => {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+    const existing = createKeyframe("scaleX", 1000, 1, "ease-in");
+    store.getState().addKeyframe(rectId, existing);
+
+    const result = store.getState().setAnimatableValue(
+      rectId,
+      "scaleX",
+      2.5,
+      1000,
+    );
+
+    expect(result).toBe(true);
+    const track = getTrack(store.getState().project.elements[0], "scaleX");
+    expect(track).toHaveLength(1);
+    expect(track[0]).toEqual({ ...existing, value: 2.5 });
+  });
+
+  it("leaves other property tracks and elements untouched", () => {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+    const dot = project.elements[1];
+    const yKeyframe = createKeyframe("y", 0, 3);
+    store.getState().addKeyframe(rectId, createKeyframe("x", 0, 1));
+    store.getState().addKeyframe(rectId, yKeyframe);
+
+    store.getState().setAnimatableValue(rectId, "x", 7, 0);
+
+    const state = store.getState().project;
+    expect(getTrack(state.elements[0], "y")).toEqual([yKeyframe]);
+    expect(state.elements[1]).toBe(dot);
+  });
+
+  it("rejects unknown ids, invalid properties, and non-finite values", () => {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+    const before = store.getState().project;
+
+    expect(store.getState().setAnimatableValue("no-such-id", "x", 1, 0)).toBe(
+      false,
+    );
+    expect(
+      store.getState().setAnimatableValue(
+        rectId,
+        "width" as unknown as Keyframe["property"],
+        1,
+        0,
+      ),
+    ).toBe(false);
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(store.getState().setAnimatableValue(rectId, "x", value, 0)).toBe(
+        false,
+      );
+    }
+    expect(store.getState().project).toBe(before);
+  });
+
+  it("rejects invalid keyframe times once the property is animated", () => {
+    const { store, project } = makeStore();
+    const rectId = project.elements[0].id;
+    store.getState().addKeyframe(rectId, createKeyframe("x", 1000, 1));
+    const before = store.getState().project;
+
+    for (const timeMs of [-1, 10.5, 5001, Number.NaN]) {
+      expect(store.getState().setAnimatableValue(rectId, "x", 2, timeMs)).toBe(
+        false,
+      );
+    }
+    expect(store.getState().project).toBe(before);
+  });
+});

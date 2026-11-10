@@ -1,6 +1,7 @@
 import { create, type StoreApi, type UseBoundStore } from "zustand";
-import { createElement, createProject } from "@/project/defaults";
+import { createElement, createKeyframe, createProject } from "@/project/defaults";
 import type {
+  AnimatableProperty,
   EllipseElement,
   Keyframe,
   Project,
@@ -8,6 +9,7 @@ import type {
   SceneElement,
   TextElement,
 } from "@/project/model";
+import { ANIMATABLE_PROPERTIES } from "@/project/model";
 
 /**
  * Union of per-type partial updates, excluding `keyframes`: track changes
@@ -34,6 +36,10 @@ const ALLOWED_UPDATE_KEYS: Record<SceneElement["type"], ReadonlySet<string>> = {
   ellipse: updateKeysOf(createElement("ellipse")),
   text: updateKeysOf(createElement("text")),
 };
+
+const ANIMATABLE_PROPERTY_SET: ReadonlySet<string> = new Set(
+  ANIMATABLE_PROPERTIES,
+);
 
 function updateKeysOf(element: SceneElement): ReadonlySet<string> {
   return new Set(
@@ -92,6 +98,25 @@ export interface ProjectStoreState {
   moveKeyframe: (
     elementId: string,
     keyframeId: string,
+    timeMs: number,
+  ) => boolean;
+  /**
+   * Writes one animatable property value following the editor's authoring
+   * rule: with no keyframes on that property the base value is updated
+   * (`transform[property]` or `style.opacity`), matching pre-animation
+   * editing; once the property has keyframes the value is written as a
+   * keyframe at `timeMs` — updating the keyframe already at that time, or
+   * inserting one (sorted, default `linear` easing) when the time is empty.
+   * This is what makes "add a keyframe, move the playhead, change the
+   * value" produce an actual animation instead of an invisible base edit.
+   * Rejects (returns false, no change): unknown element ids, properties
+   * outside `ANIMATABLE_PROPERTIES`, non-finite values, and — once the
+   * property has keyframes — non-integer or out-of-range `timeMs`.
+   */
+  setAnimatableValue: (
+    elementId: string,
+    property: AnimatableProperty,
+    value: number,
     timeMs: number,
   ) => boolean;
   /** Replaces the canvas; rejects non-finite or non-positive `fps`. */
@@ -244,6 +269,69 @@ export function createProjectStore(
           ...project,
           elements: project.elements.map((el) =>
             el.id === elementId ? nextElement : el,
+          ),
+          updatedAt: nowIso(),
+        },
+      });
+      return true;
+    },
+
+    setAnimatableValue: (elementId, property, value, timeMs) => {
+      const { project } = get();
+      const element = project.elements.find((el) => el.id === elementId);
+      if (!element) {
+        return false;
+      }
+      if (
+        !ANIMATABLE_PROPERTY_SET.has(property) ||
+        !Number.isFinite(value)
+      ) {
+        return false;
+      }
+      const track = element.keyframes.filter(
+        (keyframe) => keyframe.property === property,
+      );
+      if (track.length === 0) {
+        // No animation on this property yet: edit the base value. This is
+        // time-independent, so the playhead's fractional time is irrelevant.
+        const nextElement: SceneElement =
+          property === "opacity"
+            ? { ...element, style: { ...element.style, opacity: value } }
+            : {
+                ...element,
+                transform: { ...element.transform, [property]: value },
+              };
+        set({
+          project: {
+            ...project,
+            elements: project.elements.map((el) =>
+              el.id === elementId ? nextElement : el,
+            ),
+            updatedAt: nowIso(),
+          },
+        });
+        return true;
+      }
+      if (
+        !Number.isInteger(timeMs) ||
+        timeMs < 0 ||
+        timeMs > project.durationMs
+      ) {
+        return false;
+      }
+      const existing = track.find((keyframe) => keyframe.timeMs === timeMs);
+      const nextKeyframes = existing
+        ? element.keyframes.map((keyframe) =>
+            keyframe.id === existing.id ? { ...keyframe, value } : keyframe,
+          )
+        : [...element.keyframes, createKeyframe(property, timeMs, value)].sort(
+            (a, b) => a.timeMs - b.timeMs,
+          );
+      set({
+        project: {
+          ...project,
+          elements: project.elements.map((el) =>
+            el.id === elementId ? { ...element, keyframes: nextKeyframes } : el,
           ),
           updatedAt: nowIso(),
         },
